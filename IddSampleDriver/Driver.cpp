@@ -241,7 +241,7 @@ void SwapChainProcessor::Run()
     // For improved performance, make use of the Multimedia Class Scheduler Service, which will intelligently
     // prioritize this thread for improved throughput in high CPU-load scenarios.
     DWORD AvTask = 0;
-    HANDLE AvTaskHandle = AvSetMmThreadCharacteristics(L"Distribution", &AvTask);
+    HANDLE AvTaskHandle = AvSetMmThreadCharacteristicsW(L"Distribution", &AvTask);
 
     RunCore();
 
@@ -310,6 +310,7 @@ void SwapChainProcessor::RunCore()
         }
         else if (SUCCEEDED(hr))
         {
+			// We have new frame to process, the surface has a reference on it that the driver has to release
             AcquiredBuffer.Attach(Buffer.MetaData.pSurface);
 
             // ==============================
@@ -323,7 +324,17 @@ void SwapChainProcessor::RunCore()
             //  * a GPU custom compute shader encode operation
             // ==============================
 
+			// We have finished processing this frame hence we release the reference on it.
+			// If the driver forgets to release the reference to the surface, it will be leaked which results in the
+			// surfaces being left around after swapchain is destroyed.
+			// NOTE: Although in this sample we release reference to the surface here; the driver still
+			// owns the Buffer.MetaData.pSurface surface until IddCxSwapChainReleaseAndAcquireBuffer returns
+			// S_OK and gives us a new frame, a driver may want to use the surface in future to re-encode the desktop 
+			// for better quality if there is no new frame for a while
             AcquiredBuffer.Reset();
+
+			// Indicate to OS that we have finished inital processing of the frame, it is a hint that
+			// OS could start preparing another frame
             hr = IddCxSwapChainFinishedProcessingFrame(m_hSwapChain);
             if (FAILED(hr))
             {
@@ -418,7 +429,7 @@ IndirectDeviceContext::~IndirectDeviceContext()
     m_ProcessingThread.reset();
 }
 
-#define NUM_VIRTUAL_DISPLAYS 5
+#define NUM_VIRTUAL_DISPLAYS 1
 
 void IndirectDeviceContext::InitAdapter()
 {
@@ -672,16 +683,29 @@ NTSTATUS IddSampleMonitorQueryModes(IDDCX_MONITOR MonitorObject, const IDARG_IN_
 {
     UNREFERENCED_PARAMETER(MonitorObject);
 
-    vector<IDDCX_TARGET_MODE> TargetModes(4);
+    vector<IDDCX_TARGET_MODE> TargetModes(17);
 
     // Create a set of modes supported for frame processing and scan-out. These are typically not based on the
     // monitor's descriptor and instead are based on the static processing capability of the device. The OS will
     // report the available set of modes for a given output as the intersection of monitor modes with target modes.
 
     CreateTargetMode(TargetModes[0], 1920, 1080, 60);
-    CreateTargetMode(TargetModes[1], 1024, 768, 60);
-    CreateTargetMode(TargetModes[2], 800, 600, 60);
-    CreateTargetMode(TargetModes[3], 640, 480, 60);
+	CreateTargetMode(TargetModes[1], 1680, 1050, 60);
+	CreateTargetMode(TargetModes[2], 1600, 900, 60);
+	CreateTargetMode(TargetModes[3], 1440, 900, 60);
+	CreateTargetMode(TargetModes[4], 1400, 1050, 60);
+	CreateTargetMode(TargetModes[5], 1366, 768, 60);
+	CreateTargetMode(TargetModes[6], 1360, 768, 60);
+	CreateTargetMode(TargetModes[7], 1280, 1024, 60);
+	CreateTargetMode(TargetModes[8], 1280, 960, 60);
+	CreateTargetMode(TargetModes[9], 1280, 800, 60);
+	CreateTargetMode(TargetModes[10], 1280, 768, 60);
+	CreateTargetMode(TargetModes[11], 1280, 720, 60);
+	CreateTargetMode(TargetModes[12], 1280, 600, 60);
+	CreateTargetMode(TargetModes[13], 1152, 864, 60);
+    CreateTargetMode(TargetModes[14], 1024, 768, 60);
+    CreateTargetMode(TargetModes[15], 800, 600, 60);
+    CreateTargetMode(TargetModes[16], 640, 480, 60);
 
     pOutArgs->TargetModeBufferOutputCount = (UINT)TargetModes.size();
 
